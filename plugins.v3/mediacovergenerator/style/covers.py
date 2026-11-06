@@ -727,12 +727,9 @@ class Trailer(Cover):
         top, bottom = int(H * 0.075), int(H * 0.925)
         skew = W * 0.098
         left, right = W * 0.492, W * 0.872
-        window_height = bottom - top
-        window_width = max(1, int(round(window_height * 2.0 / 3.0)))
-        window_center = (left - skew + right) / 2.0
-        window_left = int(round(window_center - window_width / 2.0))
+        window_left = int(left - skew)
         self.window_at = (window_left, top)
-        window_size = (window_width, window_height)
+        window_size = (int(right - left + skew) + 1, bottom - top)
         # 直接缩放，不裁剪原图；原图宽高全部参与显示。
         self.windows = [ImageEnhance.Contrast(
             self.image(index).resize(window_size, Image.Resampling.LANCZOS)).enhance(1.05)
