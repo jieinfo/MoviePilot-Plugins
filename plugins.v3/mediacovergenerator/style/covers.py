@@ -720,20 +720,33 @@ class Glint(Cover):
 
 
 class Trailer(Cover):
-    """虚化背景上的预告横幅：左侧标题配单个矩形图片窗口。"""
+    """虚化背景上的预告横幅：左上角斜角飘带，右边平行四边形的大图和一条细斜栏。换图时斜切成几条错开滑入。"""
+
+    BANDS = 5
 
     def prepare(self):
         W, H, s = self.W, self.H, self.s
         top, bottom = int(H * 0.075), int(H * 0.925)
         skew = W * 0.098
         left, right = W * 0.492, W * 0.872
-        window_left = int(left - skew)
-        self.window_at = (window_left, top)
+        main_points = [(left, top), (right, top), (right - skew, bottom), (left - skew, bottom)]
+        bar_left, bar_right = right + W * 0.022, right + W * 0.06
+        bar_points = [(bar_left, top), (bar_right, top), (bar_right - skew, bottom), (bar_left - skew, bottom)]
+        self.window_mask = polygon_mask(self.size, main_points)
+        # 把窗口沿斜边切成几条，换图时一条条错开滑入，方向交替
+        self.skew_ratio = skew / float(bottom - top)
+        self.bands = []
+        for band in range(self.BANDS):
+            first = left + (right - left) * band / self.BANDS
+            second = left + (right - left) * (band + 1) / self.BANDS
+            self.bands.append(polygon_mask(self.size, [(first, top), (second, top), (second - skew, bottom), (first - skew, bottom)]))
+        self.bar_mask = polygon_mask(self.size, bar_points)
+        self.window_at = (int(left - skew), top)
         window_size = (int(right - left + skew) + 1, bottom - top)
-        # 直接缩放，不裁剪原图；原图宽高全部参与显示。
-        self.windows = [ImageEnhance.Contrast(
-            self.image(index).resize(window_size, Image.Resampling.LANCZOS)).enhance(1.05)
-            for index in range(self.count)]
+        self.bar_at = (int(bar_left - skew), top)
+        bar_size = (int(bar_right - bar_left + skew) + 1, bottom - top)
+        self.windows = [ImageEnhance.Contrast(self.fit(index, window_size)).enhance(1.05) for index in range(self.count)]
+        self.bars = [self.fit(index, bar_size) for index in range(self.count)]
         self.grounds = [self.backdrop(index, 0.36) for index in range(self.count)]
 
         x_axis, _y_axis = axes(self.size)
@@ -770,14 +783,30 @@ class Trailer(Cover):
         raw = (local - hold) / (1.0 - hold) if local > hold else 0.0
         progress = ease(raw)
         ground = self.grounds[current]
+        window = Image.new("RGB", self.size)
+        window.paste(self.windows[current], self.window_at)
+        bar = self.bars[following]
         if raw > 0:
             ground = Image.blend(ground, self.grounds[following], progress)
-            window = Image.blend(self.windows[current], self.windows[following], progress)
-        else:
-            window = self.windows[current]
+            bar = Image.blend(bar, self.bars[(following + 1) % self.count], progress)
+            incoming = self.windows[following]
+            for band, mask in enumerate(self.bands):
+                # 每条晚一点出发，方向交替，沿斜边滑入
+                start = band * 0.1
+                amount = ease_out((raw - start) / (1.0 - 0.1 * (self.BANDS - 1)))
+                if amount <= 0:
+                    continue
+                offset_y = int(round((1.0 - amount) * self.H * (1 if band % 2 else -1)))
+                offset_x = int(round(-offset_y * self.skew_ratio))
+                moved = window.copy()
+                moved.paste(incoming, (self.window_at[0] + offset_x, self.window_at[1] + offset_y))
+                window.paste(moved, (0, 0), mask)
         canvas = ground.convert("RGBA")
         canvas.alpha_composite(self.shade)
-        canvas.paste(window, self.window_at)
+        canvas.paste(window, (0, 0), self.window_mask)
+        bar_layer = Image.new("RGB", self.size)
+        bar_layer.paste(bar, self.bar_at)
+        canvas.paste(bar_layer, (0, 0), self.bar_mask)
         canvas.alpha_composite(self.overlay)
         return canvas
 
