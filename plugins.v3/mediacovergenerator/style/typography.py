@@ -1,7 +1,7 @@
 """
 封面标题的测量与绘制。
 
-- 放不下时先缩小、再折行，长标题不会盖住画面或超出画布
+- 主标题字号固定，放不下时只折行，标题长度不会改变字号
 - 上下位置和主副标题间距都按笔画的实际范围计算，不受字体行高影响
 - 左右也按笔画对齐：去掉首字的字侧留白，标题才能和旁边的线条、图片对齐
 - 内部尺寸乘以 SUPERSAMPLE，绘制后再缩小，低分辨率动图上的文字也能保持清晰
@@ -9,8 +9,6 @@
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 SUPERSAMPLE = 2
-# 主标题缩到这个比例还放不下时才折行
-MAIN_MIN_SCALE = 0.56
 # 主标题字数越少，字距越开：两个字的标题撑得起更宽的字距
 WIDE_TRACKING_BY_LENGTH = {1: 0.0, 2: 1.5, 3: 1.15}
 _GLYPH_SPANS = {}
@@ -54,6 +52,21 @@ def split_title(text):
         return list(best)
     middle = (len(text) + 1) // 2
     return [text[:middle], text[middle:]]
+
+
+def wrap_title(font, text, tracking, max_width):
+    """在固定字号下按字符折行，避免长标题通过缩小字号适配。"""
+    lines, current = [], ""
+    for char in text:
+        candidate = current + char
+        if current and tracked_width(font, candidate, tracking) > max_width:
+            lines.append(current)
+            current = char
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines or [text]
 
 
 def wrap_words(font, text, tracking, max_width):
@@ -129,32 +142,11 @@ class TitleLayout:
         text = self.main_text
         if not text:
             return [], load_font(path, size)
-        full_ratio = self.main_tracking_ratio
-        current = size
-        while current > size * MAIN_MIN_SCALE:
-            # 越接近缩放下限，正字距收得越紧，长标题尽量排在一行
-            progress = (size - current) / (size * (1.0 - MAIN_MIN_SCALE))
-            ratio = full_ratio * (1.0 - 0.8 * progress) if full_ratio > 0 else full_ratio
-            font = load_font(path, current)
-            if self._fits_main(font, [text], ratio):
-                self.main_tracking_ratio = ratio
-                return [text], font
-            current *= 0.95
-        # 单个西文词不能拆开，只继续缩小
-        if " " not in text and not is_cjk_text(text):
-            while True:
-                font = load_font(path, current)
-                if self._fits_main(font, [text], full_ratio) or current < 8:
-                    return [text], font
-                current *= 0.95
-        # 缩到下限仍放不下时折成两行，再按最长行继续收缩
-        lines = split_title(text)
-        current = size * 0.8
-        while True:
-            font = load_font(path, current)
-            if self._fits_main(font, lines, full_ratio) or current < 8:
-                return lines, font
-            current *= 0.95
+        font = load_font(path, size)
+        tracking = font.size * self.main_tracking_ratio
+        if self._fits_main(font, [text], self.main_tracking_ratio):
+            return [text], font
+        return wrap_title(font, text, tracking, self.max_width), font
 
     def _fit_sub(self, path, size):
         if not self.sub_text:
