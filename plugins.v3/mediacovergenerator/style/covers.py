@@ -366,13 +366,13 @@ class Cover:
         if style == "solid":
             layer.paste(color + (255,), (0, 0), rounded_mask((width, height), radius))
             text_color = ink or CARD
-        else:
+        elif style != "plain":
             layer.alpha_composite(border_layer((width, height), radius, color + (215,), max(1.0, 3 * self.s)))
         layer.alpha_composite(sub.render((width, height), pad_x, pad_y - sub.offset_y, sub_fill=text_color + (255,)))
         return layer
 
     def title_block(self, max_width, sub_style="tag", button=False, main_fill=GHOST_WHITE, sub_fill=None, shadow=None,
-                    main_factor=1.0, align="left", button_below_sub=False):
+                    main_factor=1.0, align="left", tag_style="outline"):
         """
         主标题加一行标签或副标题，返回 (RGBA 图层, 笔画左边距, 笔画高度)。
         图层四周留了边，投影不会被切掉；上下偏移由调用方加上。
@@ -384,7 +384,7 @@ class Cover:
         chip_h = int(self.spec.sub_size * s * 1.72)
 
         items = []
-        tag = self.label(fill=sub_fill or GHOST_WHITE, max_width=max_width) if sub_style == "tag" else None
+        tag = self.label(style=tag_style, fill=sub_fill or GHOST_WHITE, max_width=max_width) if sub_style == "tag" else None
         if tag is not None:
             chip_h = tag.height
         if button:
@@ -392,13 +392,7 @@ class Cover:
         if tag is not None:
             items.append(tag)
         text = self.layout(max_width, part="sub") if sub_style == "text" and self.has_sub() else None
-        button_item = items[0] if button and button_below_sub else None
-        if button_item is not None:
-            items = []
-
         row_h = max([item.height for item in items] + [int(text.height) if text else 0] + [0])
-        if button_item is not None:
-            row_h = int(text.height if text else 0) + button_item.height + int(18 * s)
         ink_h = main.main_height + (gap + row_h if row_h else 0.0)
         width = int(max_width) + margin * 2
         height = int(ink_h) + margin * 2
@@ -418,9 +412,6 @@ class Cover:
             color = sub_fill or SILVER
             layer.alpha_composite(text.render((width, height), cursor, row_y - text.offset_y, align=align,
                                               sub_fill=color + (255,), shadow=shadow))
-        if button_item is not None:
-            button_y = row_y + (text.height if text else 0) + 18 * s
-            layer.alpha_composite(button_item, (int(cursor), int(button_y)))
         return layer, margin, ink_h
 
 
@@ -764,9 +755,8 @@ class Trailer(Cover):
         self.shade = rgba_from_alpha(self.base_color(), np.clip(shade, 0, 1))
 
         margin_x = W * 0.05
-        # 副标题不使用边框，播放按钮另起一行，形成标题、字幕、播放键的纵向排列。
-        block, margin, ink_h = self.title_block(
-            W * 0.345, sub_style="text", button=True, button_below_sub=True)
+        # 保持播放按钮和副标题同行，仅去掉副标题外框。
+        block, margin, ink_h = self.title_block(W * 0.345, sub_style="tag", button=True, tag_style="plain")
         center = H * 0.54 + self.spec.offset_y * s
         composite_at(self.overlay, block, margin_x - margin, center - ink_h / 2.0 - margin)
 
