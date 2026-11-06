@@ -756,9 +756,8 @@ class Trailer(Cover):
         self.shade = rgba_from_alpha(self.base_color(), np.clip(shade, 0, 1))
 
         margin_x = W * 0.05
-        block, margin, ink_h = self.title_block(W * 0.345, sub_style=None, button=True)
-        if self.has_sub():
-            self._ribbon(margin_x, int(H * 0.085))
+        # 副标题与播放按钮放在标题下方同行，和其他风格保持一致。
+        block, margin, ink_h = self.title_block(W * 0.345, sub_style="tag", button=True)
         center = H * 0.54 + self.spec.offset_y * s
         composite_at(self.overlay, block, margin_x - margin, center - ink_h / 2.0 - margin)
 
