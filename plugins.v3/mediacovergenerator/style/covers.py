@@ -724,6 +724,14 @@ class Trailer(Cover):
 
     BANDS = 5
 
+    def _fit_source(self, index, size):
+        """2:3 竖图不裁剪，完整缩放到窗口；其他比例沿用智能裁剪。"""
+        image = self.image(index)
+        source_ratio = image.width / float(image.height)
+        if abs(source_ratio - 2.0 / 3.0) <= 0.04:
+            return image.resize(size, Image.Resampling.LANCZOS)
+        return self.fit(index, size)
+
     def prepare(self):
         W, H, s = self.W, self.H, self.s
         top, bottom = int(H * 0.075), int(H * 0.925)
@@ -745,8 +753,9 @@ class Trailer(Cover):
         window_size = (int(right - left + skew) + 1, bottom - top)
         self.bar_at = (int(bar_left - skew), top)
         bar_size = (int(bar_right - bar_left + skew) + 1, bottom - top)
-        self.windows = [ImageEnhance.Contrast(self.fit(index, window_size)).enhance(1.05) for index in range(self.count)]
-        self.bars = [self.fit(index, bar_size) for index in range(self.count)]
+        self.windows = [ImageEnhance.Contrast(self._fit_source(index, window_size)).enhance(1.05)
+                        for index in range(self.count)]
+        self.bars = [self._fit_source(index, bar_size) for index in range(self.count)]
         self.grounds = [self.backdrop(index, 0.36) for index in range(self.count)]
 
         x_axis, _y_axis = axes(self.size)
